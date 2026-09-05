@@ -3,9 +3,15 @@
  * Todos los valores no variables (hardcoded) viven aquí y se nombran en MAYÚSCULAS.
  */
 
-/** URL base de la Verome API. Se sobrescribe con VITE_VEROME_BASE_URL en .env. */
+/**
+ * URL base de la Verome API.
+ * Por defecto apunta al despliegue público, para que cualquier compilación
+ * funcione sin configuración previa. Para trabajar contra una copia local de
+ * la API basta con definir VITE_VEROME_BASE_URL en .env.
+ */
 export const VEROME_BASE_URL =
-  import.meta.env.VITE_VEROME_BASE_URL || 'http://localhost:8000';
+  import.meta.env.VITE_VEROME_BASE_URL ||
+  'https://verome-api.enunezgit.deno.net';
 
 /** Filtros de /api/search que consultamos en cada búsqueda. */
 export const SEARCH_FILTERS = ['artists', 'albums'];
