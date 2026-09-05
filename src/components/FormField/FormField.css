@@ -1,0 +1,27 @@
+.form-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.form-field__label {
+  font-size: 12px;
+  color: #2f71e5;
+}
+
+.form-field__input {
+  padding: 8px 0;
+  font: inherit;
+  border: none;
+  border-bottom: 1px solid #c4c4c4;
+}
+
+.form-field__input_invalid {
+  border-bottom-color: #ff0000;
+}
+
+.form-field__error {
+  min-height: 18px;
+  font-size: 12px;
+  color: #ff0000;
+}

@@ -1,0 +1,16 @@
+.not-found {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  padding: 96px 16px;
+  text-align: center;
+}
+
+.not-found__title {
+  font-size: 64px;
+}
+
+.not-found__link {
+  text-decoration: underline;
+}

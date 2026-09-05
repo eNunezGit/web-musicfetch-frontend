@@ -1,0 +1,67 @@
+.card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 16px;
+  border: 1px solid #d1d2d6;
+  border-radius: 16px;
+}
+
+.card__image {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: cover;
+  border-radius: 12px;
+}
+
+
+/* El botón se posiciona respecto de .card, que es el bloque padre relativo. */
+.card__action {
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  padding: 8px;
+  background-color: #fff;
+  border: none;
+  border-radius: 8px;
+}
+
+.card__action-icon {
+  stroke: currentColor;
+}
+
+.card__action_saved .card__action-icon {
+  fill: currentColor;
+}
+
+.card__type {
+  font-size: 14px;
+  text-transform: uppercase;
+  color: #b6bcbf;
+}
+
+.card__title {
+  font-size: 20px;
+}
+
+.card__stats {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.card__stat-label {
+  font-size: 12px;
+  text-transform: uppercase;
+  color: #b6bcbf;
+}
+
+.card__highlights {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 14px;
+  color: #4d4d4d;
+}

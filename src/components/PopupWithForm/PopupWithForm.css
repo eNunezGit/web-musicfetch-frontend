@@ -1,0 +1,37 @@
+.popup__form {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.popup__fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.popup__submit-error {
+  color: #ff0000;
+  text-align: center;
+}
+
+.popup__submit {
+  padding: 16px;
+  color: #fff;
+  background-color: #2f71e5;
+  border: none;
+  border-radius: 100px;
+}
+
+.popup__switch {
+  text-align: center;
+  color: #2f71e5;
+}
+
+.popup__switch-button {
+  padding: 0;
+  color: inherit;
+  background: none;
+  border: none;
+  text-decoration: underline;
+}

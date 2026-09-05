@@ -24,3 +24,6 @@ dist-ssr
 *.sw?
 
 .claude
+
+# Variables de entorno locales
+.env

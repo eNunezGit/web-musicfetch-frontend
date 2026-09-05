@@ -1,1 +1,12 @@
+.about {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 70ch;
+  padding: 48px 0;
+  border-top: 1px solid #d1d2d6;
+}
 
+.about__title {
+  font-size: 24px;
+}
