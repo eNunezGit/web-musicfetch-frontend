@@ -12,7 +12,6 @@ JSX y conexión con una API third-party).
 
 ```bash
 npm install
-cp .env.example .env
 npm run dev
 ```
 
@@ -21,25 +20,28 @@ La aplicación queda en <http://localhost:5173>.
 ### La API
 
 La aplicación consume la [Verome API](https://github.com/Kirazul/Verome-API),
-un proyecto de terceros (MIT) escrito en Deno. El despliegue que anuncia su
-README (`verome-api.deno.dev`) responde 404, así que se levanta en local:
+un proyecto de terceros (MIT) escrito en Deno. Está desplegada en
+<https://verome-api.enunezgit.deno.net> desde un fork propio, así que
+`npm run dev` y `npm run build` funcionan sin configurar nada.
+
+Para trabajar contra una copia local de la API:
 
 ```bash
-npm install -g deno                                   # una sola vez
-git clone https://github.com/Kirazul/Verome-API.git ../verome-api
-cd ../verome-api && deno task start                   # queda en :8000
+npm install -g deno
+git clone https://github.com/eNunezGit/Verome-API.git ../verome-api
+cd ../verome-api && deno task start          # queda en :8000
 ```
 
-Con la API escuchando, `npm run dev` en este repositorio ya la encuentra:
-`VITE_VEROME_BASE_URL` vale `http://localhost:8000` por defecto. Si la
-despliegas en otro sitio, cambia esa variable en `.env`. Cuando no hay ninguna
-API respondiendo, la búsqueda muestra un mensaje de error en lugar de fallar
-en silencio.
+y define `VITE_VEROME_BASE_URL=http://localhost:8000` en `.env`. Cuando no hay
+ninguna API respondiendo, la búsqueda muestra un mensaje de error en lugar de
+fallar en silencio.
 
 Las imágenes que devuelve la API vienen a 60 px en las búsquedas y como
 banners de hasta 2880 px en las fichas de artista. `veromeApi.js` reescribe el
 tamaño en la propia URL para pedirlas siempre a 544 px cuadrados: las
 miniaturas dejan de verse borrosas y los banners bajan de ~900 KB a ~100 KB.
+Si una miniatura no existe o no se puede cargar, la tarjeta cae en una portada
+de reserva.
 
 ### Comandos
 
@@ -96,9 +98,26 @@ del sistema como alternativa.
 `/my-feed` están en inglés. Los comentarios del código y este README siguen en
 español.
 
+## Despliegue
+
+El front-end se despliega en Vercel, que detecta Vite y compila con
+`npm run build` sin configuración adicional.
+
+El único archivo necesario es `vercel.json`. Vercel no reescribe las rutas de
+una SPA por su cuenta, así que sin él una visita directa a `/my-feed`
+devolvería un 404 en lugar de la aplicación:
+
+```json
+{
+  "rewrites": [{ "source": "/(.*)", "destination": "/index.html" }]
+}
+```
+
+No hace falta declarar ninguna variable de entorno en el panel: la URL de la
+API es el valor por defecto en `constants.js`, de modo que una compilación
+desde un clon limpio ya apunta al despliegue público.
+
 ## Pendiente
 
-- Backend real que sustituya a `mainApi.js`.
-- Despliegue, con la regla de reescritura que necesita una SPA para que
-  `/my-feed` funcione al abrirla directamente. La Verome API también tendrá que
-  estar accesible desde internet, no solo en `localhost`.
+- Backend real que sustituya a `mainApi.js`. Mientras tanto, la sesión y las
+  tarjetas viven en el `localStorage` de cada navegador.
