@@ -121,3 +121,19 @@ desde un clon limpio ya apunta al despliegue público.
 
 - Backend real que sustituya a `mainApi.js`. Mientras tanto, la sesión y las
   tarjetas viven en el `localStorage` de cada navegador.
+
+## Enlaces del proyecto
+
+| Qué | Dónde |
+| --- | --- |
+| Aplicación desplegada | <https://web-musicfetch-frontend.vercel.app> |
+| API desplegada | <https://verome-api.enunezgit.deno.net> |
+| Repositorio del front-end | <https://github.com/eNunezGit/web-musicfetch-frontend> |
+| Fork de la API | <https://github.com/eNunezGit/Verome-API> |
+
+La API es un fork de [Kirazul/Verome-API](https://github.com/Kirazul/Verome-API),
+que es el proyecto original. El fork solo existe para poder desplegarla en una
+organización propia de Deno Deploy; el código de la API no es de este proyecto.
+
+El front-end se despliega solo en cada push a `main`, y cada pull request recibe
+además su propia URL de vista previa.
