@@ -15,6 +15,7 @@ import { CurrentUserContext } from '../../contexts/CurrentUserContext';
 import * as mainApi from '../../utils/mainApi';
 import { getCardDetails, searchMusic } from '../../utils/veromeApi';
 import {
+  AUTH_ERRORS,
   CARDS_PER_PAGE,
   MESSAGES,
   POPUPS,
@@ -24,8 +25,25 @@ import {
 import './App.css';
 
 /**
+ * Texto en inglés para un fallo de sesión. mainApi rechaza con el código de
+ * estado del servidor; sin código, la petición no llegó a responder.
+ */
+function describeAuthError(err) {
+  if (!err.status) {
+    return AUTH_ERRORS.offline;
+  }
+
+  return AUTH_ERRORS[err.status] || AUTH_ERRORS.default;
+}
+
+/** Un token caducado o falso ya no sirve; un servidor caído no lo invalida. */
+function isRejectedToken(err) {
+  return err.status === 401 || err.status === 403;
+}
+
+/**
  * Componente raíz. Concentra el estado de la aplicación y todas las peticiones,
- * tanto a la Verome API como al backend de tarjetas.
+ * tanto a la Verome API como al backend propio.
  */
 function App() {
   const navigate = useNavigate();
@@ -67,21 +85,28 @@ function App() {
     }
 
     mainApi
-      .checkToken(token)
+      .getCurrentUser(token)
       .then((user) => {
         setCurrentUser(user);
         setIsLoggedIn(true);
-        return mainApi.getSavedCards(token);
-      })
-      .then((cards) => {
-        setSavedCards(cards);
-        setIsAuthChecked(true);
+
+        // Que el feed falle no invalida la sesión: se avisa y se sigue.
+        return mainApi.getSavedCards(token).then(setSavedCards, (err) => {
+          console.error(err);
+          setCardsError(MESSAGES.cardsLoadFailed);
+        });
       })
       .catch((err) => {
         console.error(err);
-        localStorage.removeItem(STORAGE_KEYS.token);
-        setIsAuthChecked(true);
-      });
+
+        // El token solo se descarta si el servidor lo ha rechazado. Si el
+        // servidor no responde, cerrar la sesión castigaría al usuario por
+        // una caída ajena: el token puede seguir siendo válido.
+        if (isRejectedToken(err)) {
+          localStorage.removeItem(STORAGE_KEYS.token);
+        }
+      })
+      .finally(() => setIsAuthChecked(true));
   }, []);
 
   const closePopup = useCallback(() => {
@@ -93,6 +118,16 @@ function App() {
     setAuthError('');
     setActivePopup(name);
   }
+
+  /**
+   * Abre el inicio de sesión. Va con useCallback porque ProtectedRoute lo
+   * recibe como dependencia de un efecto: una función nueva en cada render
+   * lo volvería a disparar sin motivo.
+   */
+  const openLoginPopup = useCallback(() => {
+    setAuthError('');
+    setActivePopup(POPUPS.login);
+  }, []);
 
   // Verome API
 
@@ -152,11 +187,13 @@ function App() {
     setBusyCardId(card.id);
     setCardsError('');
 
+    // El servidor identifica la tarjeta por el _id del documento guardado,
+    // no por el id que trae de la API de música.
     mainApi
-      .deleteCard(card.id, token)
+      .deleteCard(card.savedId, token)
       .then((deletedId) => {
         setSavedCards((current) =>
-          current.filter((saved) => saved.id !== deletedId),
+          current.filter((saved) => saved.savedId !== deletedId),
         );
         setBusyCardId('');
       })
@@ -169,12 +206,43 @@ function App() {
 
   // Sesión
 
+  /**
+   * Deja la sesión lista a partir de un token recién emitido: pide el usuario
+   * y sus tarjetas, y solo entonces guarda el token. Si algo falla antes, no
+   * queda una sesión a medias en el navegador.
+   * La comparten el inicio de sesión y el registro, que termina conectando.
+   */
+  function startSession(token) {
+    return Promise.all([
+      mainApi.getCurrentUser(token),
+      mainApi.getSavedCards(token),
+    ]).then(([user, cards]) => {
+      localStorage.setItem(STORAGE_KEYS.token, token);
+
+      setCurrentUser(user);
+      setSavedCards(cards);
+      setIsLoggedIn(true);
+      setIsAuthChecked(true);
+    });
+  }
+
   function handleRegister(values) {
     setIsSubmitting(true);
     setAuthError('');
 
+    // Si /signup responde pero /signin no, la cuenta ya existe: hay que
+    // llevar al usuario a iniciar sesión, no a repetir el registro.
+    let isAccountCreated = false;
+
     mainApi
       .register(values)
+      .then(() => {
+        isAccountCreated = true;
+        // Registrarse deja la sesión iniciada, sin pedir las credenciales
+        // otra vez: son las mismas que se acaban de escribir.
+        return mainApi.login({ email: values.email, password: values.password });
+      })
+      .then(({ token }) => startSession(token))
       .then(() => {
         setIsRegisterSuccess(true);
         setActivePopup(POPUPS.tooltip);
@@ -182,8 +250,15 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setAuthError(err.message);
         setIsSubmitting(false);
+
+        if (isAccountCreated) {
+          setActivePopup(POPUPS.login);
+          setAuthError(MESSAGES.accountCreatedSignInFailed);
+          return;
+        }
+
+        setAuthError(describeAuthError(err));
       });
   }
 
@@ -191,22 +266,18 @@ function App() {
     setIsSubmitting(true);
     setAuthError('');
 
+    // /signin solo devuelve el token: el usuario y sus tarjetas se piden
+    // después, ya con la cabecera de autorización puesta.
     mainApi
       .login(values)
-      .then(({ token, user }) => {
-        localStorage.setItem(STORAGE_KEYS.token, token);
-        setCurrentUser(user);
-        setIsLoggedIn(true);
+      .then(({ token }) => startSession(token))
+      .then(() => {
         setActivePopup(POPUPS.none);
-        return mainApi.getSavedCards(token);
-      })
-      .then((cards) => {
-        setSavedCards(cards);
         setIsSubmitting(false);
       })
       .catch((err) => {
         console.error(err);
-        setAuthError(err.message);
+        setAuthError(describeAuthError(err));
         setIsSubmitting(false);
       });
   }
@@ -225,7 +296,7 @@ function App() {
       <div className="page">
         <Header
           isLoggedIn={isLoggedIn}
-          onLoginClick={() => openPopup(POPUPS.login)}
+          onLoginClick={openLoginPopup}
           onLogout={handleLogout}
         />
 
@@ -252,7 +323,11 @@ function App() {
           <Route
             path={ROUTES.feed}
             element={
-              <ProtectedRoute isLoggedIn={isLoggedIn} isAuthChecked={isAuthChecked}>
+              <ProtectedRoute
+                isLoggedIn={isLoggedIn}
+                isAuthChecked={isAuthChecked}
+                onUnauthorized={openLoginPopup}
+              >
                 <Feed
                   cards={savedCards}
                   busyCardId={busyCardId}
@@ -290,7 +365,10 @@ function App() {
           isOpen={activePopup === POPUPS.tooltip}
           isSuccess={isRegisterSuccess}
           onClose={closePopup}
-          onSwitch={() => openPopup(POPUPS.login)}
+          onContinue={() => {
+            closePopup();
+            navigate(ROUTES.feed);
+          }}
         />
       </div>
     </CurrentUserContext.Provider>

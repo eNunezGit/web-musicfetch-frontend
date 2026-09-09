@@ -1,157 +1,175 @@
 /**
- * Backend simulado de MusicFetch.
+ * Cliente del backend propio de MusicFetch.
+ * Se ocupa de la sesión (registro, inicio de sesión, usuario actual) y de las
+ * tarjetas guardadas. Como en veromeApi.js, solo se usa la API Fetch nativa:
+ * este archivo construye y normaliza peticiones, y quien las dispara y captura
+ * los errores es el componente App.
  *
- * Persiste usuarios y tarjetas en localStorage imitando la forma de una base de
- * datos: un registro de usuarios y, aparte, las tarjetas indexadas por usuario.
- * Cada consulta filtra por el usuario del token, así que un usuario solo puede
- * leer y borrar sus propias tarjetas.
- *
- * Todas las funciones devuelven promesas para que, cuando exista el backend
- * real, baste con sustituir el cuerpo por un fetch() sin tocar los componentes.
- *
- * PENDIENTE: sustituir por el servidor real. Las contraseñas se guardan en
- * claro porque esto es una simulación local; el backend debe hashearlas.
+ * Las rutas protegidas viajan con `Authorization: Bearer <token>`. El token lo
+ * guarda App en localStorage al iniciar sesión y lo pasa en cada llamada.
  */
 
-import { STORAGE_KEYS } from './constants';
+import { CARD_TYPES, MAIN_BASE_URL } from './constants';
 
-const TOKEN_PREFIX = 'mock.';
-
-function readCollection(key) {
-  try {
-    return JSON.parse(localStorage.getItem(key)) || {};
-  } catch {
-    // Si el almacenamiento tiene datos corruptos, empezamos de cero.
-    return {};
+/**
+ * Error de la API con el código de estado a la vista.
+ * El cuerpo del servidor viene en español y la interfaz está en inglés, así que
+ * quien lo captura decide el texto a partir de `status`; `message` queda para
+ * la consola. Sin `status` significa que la petición no llegó a responder.
+ */
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
   }
 }
 
-function writeCollection(key, value) {
-  localStorage.setItem(key, JSON.stringify(value));
-}
-
-/** Simula la latencia de red para que el preloader sea visible. */
-function resolveLater(value, delay = 400) {
-  return new Promise((resolve) => {
-    setTimeout(() => resolve(value), delay);
-  });
-}
-
-function rejectLater(message, delay = 400) {
-  return new Promise((_, reject) => {
-    setTimeout(() => reject(new Error(message)), delay);
-  });
-}
-
-function toPublicUser(user) {
-  return { id: user.id, name: user.name, email: user.email };
-}
-
-function userIdFromToken(token) {
-  if (typeof token !== 'string' || !token.startsWith(TOKEN_PREFIX)) {
-    return '';
+/** El primer then() de cada cadena: valida la respuesta y devuelve res.json. */
+function checkResponse(res) {
+  if (res.ok) {
+    return res.json();
   }
-  return token.slice(TOKEN_PREFIX.length);
+
+  // Todos los errores de la API responden { message }, pero un 502 de nginx o
+  // un 429 del limitador pueden llegar en HTML: el texto no puede darse por hecho.
+  return res
+    .json()
+    .catch(() => ({}))
+    .then((data) =>
+      Promise.reject(
+        new ApiError(data.message || `Error ${res.status}`, res.status),
+      ),
+    );
 }
+
+/** Traduce un fallo de red (servidor caído, sin conexión, CORS) en un ApiError. */
+function checkNetwork(err) {
+  if (err instanceof ApiError) {
+    return Promise.reject(err);
+  }
+
+  return Promise.reject(new ApiError(err.message, undefined));
+}
+
+/**
+ * Punto único por el que pasan todas las peticiones.
+ * `token` es opcional: las rutas públicas (/signup y /signin) no lo llevan.
+ */
+function request(path, { method = 'GET', body, token } = {}) {
+  const headers = {};
+
+  if (body) {
+    headers['Content-Type'] = 'application/json';
+  }
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  return fetch(`${MAIN_BASE_URL}${path}`, {
+    method,
+    headers,
+    body: body && JSON.stringify(body),
+  })
+    .then(checkResponse)
+    .catch(checkNetwork);
+}
+
+// --- Sesión ---
 
 export function register({ name, email, password }) {
-  const users = readCollection(STORAGE_KEYS.users);
-  const normalizedEmail = email.trim().toLowerCase();
-
-  if (users[normalizedEmail]) {
-    return rejectLater('An account with that email address already exists');
-  }
-
-  const user = {
-    id: `u${Date.now()}`,
-    name: name.trim(),
-    email: normalizedEmail,
-    password,
-  };
-
-  users[normalizedEmail] = user;
-  writeCollection(STORAGE_KEYS.users, users);
-
-  return resolveLater(toPublicUser(user));
-}
-
-export function login({ email, password }) {
-  const users = readCollection(STORAGE_KEYS.users);
-  const user = users[email.trim().toLowerCase()];
-
-  if (!user || user.password !== password) {
-    return rejectLater('The email address or the password is incorrect');
-  }
-
-  return resolveLater({
-    token: `${TOKEN_PREFIX}${user.id}`,
-    user: toPublicUser(user),
+  return request('/signup', {
+    method: 'POST',
+    body: { name: name.trim(), email: email.trim().toLowerCase(), password },
   });
 }
 
-/** Recupera la sesión guardada al recargar la página. */
-export function checkToken(token) {
-  const userId = userIdFromToken(token);
-  const users = readCollection(STORAGE_KEYS.users);
-  const user = Object.values(users).find((candidate) => candidate.id === userId);
+/** Devuelve { token }: el usuario se pide después con getCurrentUser. */
+export function login({ email, password }) {
+  return request('/signin', {
+    method: 'POST',
+    body: { email: email.trim().toLowerCase(), password },
+  });
+}
 
-  if (!user) {
-    return rejectLater('Invalid session', 0);
+/**
+ * Usuario dueño del token. Es también la comprobación de la sesión guardada:
+ * si el token caducó o es falso, el servidor responde 401 y App lo descarta.
+ */
+export function getCurrentUser(token) {
+  return request('/users/me', { token });
+}
+
+// --- Tarjetas ---
+
+/**
+ * La API llama "pista" a lo que la interfaz llama "tarjeta", y guarda el
+ * artista y el álbum en campos propios. Estas dos funciones son la frontera
+ * entre ambos vocabularios: fuera de aquí, la aplicación solo maneja tarjetas.
+ */
+function toTrack(card) {
+  const isAlbum = card.type === CARD_TYPES.album;
+
+  const track = {
+    trackId: card.id,
+    type: card.type,
+    title: card.title,
+    // En una tarjeta de álbum el artista es el subtítulo; en una de artista,
+    // el propio título (ahí el subtítulo son las suscripciones).
+    artist: isAlbum ? card.subtitle || card.title : card.title,
+    subtitle: card.subtitle,
+    description: card.description,
+    stats: card.stats,
+    // La API de música devuelve alguna canción sin título; JSON.stringify la
+    // convertiría en null y el servidor rechazaría la tarjeta entera.
+    highlights: card.highlights?.filter(Boolean),
+    cover: card.image,
+  };
+
+  if (isAlbum) {
+    track.album = card.title;
   }
 
-  return resolveLater(toPublicUser(user), 0);
+  // Joi rechaza las claves declaradas que llegan como undefined, y `cover`
+  // tiene que ser una URL válida: lo que esté vacío no se envía.
+  return Object.fromEntries(
+    Object.entries(track).filter(([, value]) => value !== undefined && value !== ''),
+  );
+}
+
+function toCard(track) {
+  return {
+    // El id de la tarjeta es siempre el de la API de música: así una tarjeta
+    // del feed y la misma tarjeta en los resultados de búsqueda se reconocen.
+    id: track.trackId,
+    // El _id del documento es lo que espera DELETE /tracks/:id.
+    savedId: track._id,
+    type: track.type,
+    title: track.title,
+    subtitle: track.subtitle || '',
+    image: track.cover || '',
+    description: track.description || '',
+    stats: track.stats || [],
+    highlights: track.highlights || [],
+  };
 }
 
 export function getSavedCards(token) {
-  const userId = userIdFromToken(token);
-
-  if (!userId) {
-    return rejectLater('Invalid session', 0);
-  }
-
-  const cardsByUser = readCollection(STORAGE_KEYS.cards);
-
-  return resolveLater(cardsByUser[userId] || [], 0);
+  return request('/tracks', { token }).then((tracks) => tracks.map(toCard));
 }
 
 export function saveCard(card, token) {
-  const userId = userIdFromToken(token);
-
-  if (!userId) {
-    return rejectLater('Invalid session');
-  }
-
-  const cardsByUser = readCollection(STORAGE_KEYS.cards);
-  const userCards = cardsByUser[userId] || [];
-
-  if (userCards.some((saved) => saved.id === card.id)) {
-    return rejectLater('This card is already in your feed');
-  }
-
-  const savedCard = { ...card, owner: userId, createdAt: new Date().toISOString() };
-
-  cardsByUser[userId] = [savedCard, ...userCards];
-  writeCollection(STORAGE_KEYS.cards, cardsByUser);
-
-  return resolveLater(savedCard);
+  return request('/tracks', {
+    method: 'POST',
+    body: toTrack(card),
+    token,
+  }).then(toCard);
 }
 
-export function deleteCard(cardId, token) {
-  const userId = userIdFromToken(token);
-
-  if (!userId) {
-    return rejectLater('Invalid session');
-  }
-
-  const cardsByUser = readCollection(STORAGE_KEYS.cards);
-  const userCards = cardsByUser[userId] || [];
-
-  if (!userCards.some((saved) => saved.id === cardId)) {
-    return rejectLater('The card does not exist or does not belong to you');
-  }
-
-  cardsByUser[userId] = userCards.filter((saved) => saved.id !== cardId);
-  writeCollection(STORAGE_KEYS.cards, cardsByUser);
-
-  return resolveLater(cardId);
+/** `savedId` es el _id que devolvió el servidor, no el id de la API de música. */
+export function deleteCard(savedId, token) {
+  return request(`/tracks/${savedId}`, { method: 'DELETE', token }).then(
+    () => savedId,
+  );
 }

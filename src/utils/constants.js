@@ -13,6 +13,15 @@ export const VEROME_BASE_URL =
   import.meta.env.VITE_VEROME_BASE_URL ||
   'https://verome-api.enunezgit.deno.net';
 
+/**
+ * URL base del backend propio (sesión y tarjetas guardadas).
+ * Mismo criterio que la Verome API: por defecto el despliegue público, para
+ * trabajar contra el servidor local basta con definir VITE_MAIN_BASE_URL.
+ */
+export const MAIN_BASE_URL =
+  import.meta.env.VITE_MAIN_BASE_URL ||
+  'https://api.musicfetch.chickenkiller.com';
+
 /** Filtros de /api/search que consultamos en cada búsqueda. */
 export const SEARCH_FILTERS = ['artists', 'albums'];
 
@@ -29,7 +38,7 @@ export const CARD_TYPE_LABELS = {
 };
 
 /** Cuántas tarjetas se renderizan por tanda ("Mostrar más" añade otra tanda). */
-export const CARDS_PER_PAGE = 3;
+export const CARDS_PER_PAGE = 4;
 
 /** Longitud máxima de la descripción que se guarda en una tarjeta. */
 export const MAX_DESCRIPTION_LENGTH = 320;
@@ -55,10 +64,12 @@ export const POPUPS = {
   tooltip: 'tooltip',
 };
 
-/** Claves del almacenamiento local que usa el backend simulado. */
+/**
+ * Claves del almacenamiento local.
+ * El token es lo único que la aplicación persiste en el navegador: el usuario
+ * y sus tarjetas se piden al servidor con él en cada arranque.
+ */
 export const STORAGE_KEYS = {
-  users: 'musicfetch.users',
-  cards: 'musicfetch.cards',
   token: 'musicfetch.token',
 };
 
@@ -74,10 +85,31 @@ export const MESSAGES = {
     'The search could not be completed. There may be a connection problem or the API may be unavailable. Please try again later.',
   saveFailed: 'The card could not be saved. Please try again.',
   deleteFailed: 'The card could not be deleted. Please try again.',
+  cardsLoadFailed:
+    'Your saved cards could not be loaded. Please reload the page.',
   emptyQuery: 'Enter the name of an artist or an album',
   loginRequired: 'Sign in to save this card',
   registerSuccess: 'Registration successfully completed!',
   registerFailure: 'Oops, something went wrong. Please try again.',
+  // El registro conecta al usuario. Si esa segunda parte falla, la cuenta ya
+  // existe: repetir el registro chocaría con su propio correo.
+  accountCreatedSignInFailed:
+    'Your account was created, but the session could not be started. Please sign in.',
+};
+
+/**
+ * Errores de sesión que ve el usuario, por código de estado del servidor.
+ * La API responde en español y la interfaz está en inglés, así que el texto
+ * se decide aquí a partir del código, no del mensaje que llega en el cuerpo.
+ * `offline` es el caso en que la petición ni siquiera llegó a responder.
+ */
+export const AUTH_ERRORS = {
+  400: 'Please check the information you entered.',
+  401: 'The email address or the password is incorrect.',
+  409: 'An account with that email address already exists.',
+  429: 'Too many attempts. Please try again in a few minutes.',
+  default: 'Something went wrong. Please try again.',
+  offline: 'The server is not responding. Please try again later.',
 };
 
 /** Enlaces externos del pie de página. */
