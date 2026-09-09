@@ -29,7 +29,7 @@ export const CARD_TYPE_LABELS = {
 };
 
 /** Cuántas tarjetas se renderizan por tanda ("Mostrar más" añade otra tanda). */
-export const CARDS_PER_PAGE = 3;
+export const CARDS_PER_PAGE = 4;
 
 /** Longitud máxima de la descripción que se guarda en una tarjeta. */
 export const MAX_DESCRIPTION_LENGTH = 320;
