@@ -91,6 +91,10 @@ export const MESSAGES = {
   loginRequired: 'Sign in to save this card',
   registerSuccess: 'Registration successfully completed!',
   registerFailure: 'Oops, something went wrong. Please try again.',
+  // El registro conecta al usuario. Si esa segunda parte falla, la cuenta ya
+  // existe: repetir el registro chocaría con su propio correo.
+  accountCreatedSignInFailed:
+    'Your account was created, but the session could not be started. Please sign in.',
 };
 
 /**

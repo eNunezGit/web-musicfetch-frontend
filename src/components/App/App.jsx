@@ -119,6 +119,16 @@ function App() {
     setActivePopup(name);
   }
 
+  /**
+   * Abre el inicio de sesión. Va con useCallback porque ProtectedRoute lo
+   * recibe como dependencia de un efecto: una función nueva en cada render
+   * lo volvería a disparar sin motivo.
+   */
+  const openLoginPopup = useCallback(() => {
+    setAuthError('');
+    setActivePopup(POPUPS.login);
+  }, []);
+
   // Verome API
 
   function handleSearch(query) {
@@ -196,12 +206,43 @@ function App() {
 
   // Sesión
 
+  /**
+   * Deja la sesión lista a partir de un token recién emitido: pide el usuario
+   * y sus tarjetas, y solo entonces guarda el token. Si algo falla antes, no
+   * queda una sesión a medias en el navegador.
+   * La comparten el inicio de sesión y el registro, que termina conectando.
+   */
+  function startSession(token) {
+    return Promise.all([
+      mainApi.getCurrentUser(token),
+      mainApi.getSavedCards(token),
+    ]).then(([user, cards]) => {
+      localStorage.setItem(STORAGE_KEYS.token, token);
+
+      setCurrentUser(user);
+      setSavedCards(cards);
+      setIsLoggedIn(true);
+      setIsAuthChecked(true);
+    });
+  }
+
   function handleRegister(values) {
     setIsSubmitting(true);
     setAuthError('');
 
+    // Si /signup responde pero /signin no, la cuenta ya existe: hay que
+    // llevar al usuario a iniciar sesión, no a repetir el registro.
+    let isAccountCreated = false;
+
     mainApi
       .register(values)
+      .then(() => {
+        isAccountCreated = true;
+        // Registrarse deja la sesión iniciada, sin pedir las credenciales
+        // otra vez: son las mismas que se acaban de escribir.
+        return mainApi.login({ email: values.email, password: values.password });
+      })
+      .then(({ token }) => startSession(token))
       .then(() => {
         setIsRegisterSuccess(true);
         setActivePopup(POPUPS.tooltip);
@@ -209,8 +250,15 @@ function App() {
       })
       .catch((err) => {
         console.error(err);
-        setAuthError(describeAuthError(err));
         setIsSubmitting(false);
+
+        if (isAccountCreated) {
+          setActivePopup(POPUPS.login);
+          setAuthError(MESSAGES.accountCreatedSignInFailed);
+          return;
+        }
+
+        setAuthError(describeAuthError(err));
       });
   }
 
@@ -222,22 +270,8 @@ function App() {
     // después, ya con la cabecera de autorización puesta.
     mainApi
       .login(values)
-      .then(({ token }) =>
-        Promise.all([
-          token,
-          mainApi.getCurrentUser(token),
-          mainApi.getSavedCards(token),
-        ]),
-      )
-      .then(([token, user, cards]) => {
-        // El token se guarda cuando la sesión ya está completa; si algo
-        // hubiera fallado antes, no queda una sesión a medias en el navegador.
-        localStorage.setItem(STORAGE_KEYS.token, token);
-
-        setCurrentUser(user);
-        setSavedCards(cards);
-        setIsLoggedIn(true);
-        setIsAuthChecked(true);
+      .then(({ token }) => startSession(token))
+      .then(() => {
         setActivePopup(POPUPS.none);
         setIsSubmitting(false);
       })
@@ -262,7 +296,7 @@ function App() {
       <div className="page">
         <Header
           isLoggedIn={isLoggedIn}
-          onLoginClick={() => openPopup(POPUPS.login)}
+          onLoginClick={openLoginPopup}
           onLogout={handleLogout}
         />
 
@@ -289,7 +323,11 @@ function App() {
           <Route
             path={ROUTES.feed}
             element={
-              <ProtectedRoute isLoggedIn={isLoggedIn} isAuthChecked={isAuthChecked}>
+              <ProtectedRoute
+                isLoggedIn={isLoggedIn}
+                isAuthChecked={isAuthChecked}
+                onUnauthorized={openLoginPopup}
+              >
                 <Feed
                   cards={savedCards}
                   busyCardId={busyCardId}
@@ -327,7 +365,10 @@ function App() {
           isOpen={activePopup === POPUPS.tooltip}
           isSuccess={isRegisterSuccess}
           onClose={closePopup}
-          onSwitch={() => openPopup(POPUPS.login)}
+          onContinue={() => {
+            closePopup();
+            navigate(ROUTES.feed);
+          }}
         />
       </div>
     </CurrentUserContext.Provider>
