@@ -2,8 +2,12 @@ import Popup from '../Popup/Popup';
 import { MESSAGES } from '../../utils/constants';
 import './InfoTooltip.css';
 
-/** Confirma al usuario el resultado del registro. */
-function InfoTooltip({ isOpen, isSuccess, onClose, onSwitch }) {
+/**
+ * Confirma al usuario el resultado del registro.
+ * Registrarse ya deja la sesión iniciada, así que el botón no lleva a
+ * identificarse: lleva al feed, que es lo siguiente que quiere ver.
+ */
+function InfoTooltip({ isOpen, isSuccess, onClose, onContinue }) {
   return (
     <Popup name="tooltip" isOpen={isOpen} onClose={onClose}>
       <svg
@@ -21,8 +25,8 @@ function InfoTooltip({ isOpen, isSuccess, onClose, onSwitch }) {
       </h2>
 
       {isSuccess && (
-        <button type="button" className="info-tooltip__action" onClick={onSwitch}>
-          Sign in
+        <button type="button" className="info-tooltip__action" onClick={onContinue}>
+          Go to my feed
         </button>
       )}
     </Popup>
